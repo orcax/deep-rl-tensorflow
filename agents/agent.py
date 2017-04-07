@@ -72,20 +72,16 @@ class Agent(object):
         self.stat.load_model()
         self.target_network.run_copy()
 
-        # [ADD]
-        episode_path = lambda i: '%s/%05d' % (self.data_path, i)
-        image_path = lambda i,j: '%s/%05d/%05d.jpg' % (self.data_path, i ,j)
-        act_path = lambda i: '%s/%05d/act.txt' % (self.data_path, i)
-        reward_path = lambda i: '%s/%05d/reward.txt' % (self.data_path, i)
-        db_path = lambda i: '%s/%05d.lmdb' % (self.data_path, i)
-        num_episodes = 0
-        num_steps = 0
-
         start_t = self.stat.get_t()
         observation, reward, terminal = self.new_game()
+
         # [NOTE] observation is 84x84 frame
-        # [ADD] save observation & reward
-        frames, acts, rewards= [observation], [], []
+        # [ADD] initialize lmdb and dataset
+        db_path = lambda i: '%s/%05d.lmdb' % (self.data_path, i)
+        num_episodes, num_steps = 0, 0
+        os.makedirs(db_path(num_episodes))
+        db = lmdb.open(db_path(num_episodes), map_size=10**9)
+        frames, acts, rewards = [ observation ], [], []
 
         for _ in range(self.history_length):
             self.history.add(observation)
@@ -97,13 +93,14 @@ class Agent(object):
 
             # 1. predict
             action = self.predict(self.history.get(), ep)
-            acts.append(action)
 
             # 2. act
             observation, reward, terminal, info = self.env.step(action, is_training=True)
-            # [ADD] save observation & reward
+
+            # [ADD] save frame, act, reward
             num_steps += 1
             frames.append(observation)
+            acts.append(action)
             rewards.append(reward)
 
             # 3. observe
@@ -116,18 +113,21 @@ class Agent(object):
                 self.stat.on_step(self.t, action, reward, terminal,
                                   ep, q, loss, is_update, self.learning_rate_op)
             if terminal:
-                # [ADD] save frames, acts & rewards
-                frames = np.array(frames, dtype='uint8')
-                acts = np.array(acts, dtype='uint8')
-                rewards = np.array(rewards, dtype='float32')
-                map_size = (frames.nbytes + acts.nbytes + rewards.nbytes) * 2
-                os.makedirs(db_path(num_episodes))
-                db = lmdb.open(db_path(num_episodes), map_size=map_size)
+                # [ADD] create a new lmdb for every 100 episodes
+                if num_episodes > 0 and num_episodes % 50 == 0:
+                    os.makedirs(db_path(num_episodes))
+                    db = lmdb.open(db_path(num_episodes), map_size=10**9)
+
                 with db.begin(write=True) as txn:
-                    txn.put('frames', frames.tobytes())
-                    txn.put('acts', acts)
-                    txn.put('rewards', rewards)
-                if num_episodes > 9999:
+                    data_key = lambda x: '%s-%05d' % (x, num_episodes)
+                    frames = np.array(frames, dtype=np.uint8)
+                    txn.put(data_key('frames'), frames.tobytes())
+                    acts = np.array(acts, dtype=np.uint8)
+                    txn.put(data_key('acts'), acts.tobytes())
+                    rewards = np.array(rewards, dtype=np.int32)
+                    txn.put(data_key('rewards'), rewards.tobytes())
+
+                if num_episodes >= 9999:
                     return
 
                 observation, reward, terminal = self.new_game()
@@ -135,7 +135,7 @@ class Agent(object):
                 # [ADD] save observation & reward
                 num_episodes += 1
                 num_steps = 0
-                frames, acts, rewards= [observation], [], []
+                frames, acts, rewards= [ observation ], [], []
 
     def play(self, test_ep, n_step=10000, n_episode=100):
         tf.global_variables_initializer().run()
