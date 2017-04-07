@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
 from logging import getLogger
+import lmdb
 
 from .history import History
 from .experience import Experience
@@ -76,6 +77,7 @@ class Agent(object):
         image_path = lambda i,j: '%s/%05d/%05d.jpg' % (self.data_path, i ,j)
         act_path = lambda i: '%s/%05d/act.txt' % (self.data_path, i)
         reward_path = lambda i: '%s/%05d/reward.txt' % (self.data_path, i)
+        db_path = lambda i: '%s/%05d.lmdb' % (self.data_path, i)
         num_episodes = 0
         num_steps = 0
 
@@ -83,9 +85,7 @@ class Agent(object):
         observation, reward, terminal = self.new_game()
         # [NOTE] observation is 84x84 frame
         # [ADD] save observation & reward
-        acts, rewards = [], []
-        os.makedirs(episode_path(num_episodes))
-        cv2.imwrite(image_path(num_episodes, num_steps), observation.astype('uint8'))
+        frames, acts, rewards= [observation], [], []
 
         for _ in range(self.history_length):
             self.history.add(observation)
@@ -103,7 +103,7 @@ class Agent(object):
             observation, reward, terminal, info = self.env.step(action, is_training=True)
             # [ADD] save observation & reward
             num_steps += 1
-            cv2.imwrite(image_path(num_episodes, num_steps), observation.astype('uint8'))
+            frames.append(observation)
             rewards.append(reward)
 
             # 3. observe
@@ -116,11 +116,16 @@ class Agent(object):
                 self.stat.on_step(self.t, action, reward, terminal,
                                   ep, q, loss, is_update, self.learning_rate_op)
             if terminal:
-                # [ADD] save acts & rewards
-                with open(act_path(num_episodes), 'w') as f:
-                    f.write('\n'.join([str(a) for a in acts]))
-                with open(reward_path(num_episodes), 'w') as f:
-                    f.write('\n'.join([str(r) for r in rewards]))
+                # [ADD] save frames, acts & rewards
+                frames = np.array(frames, dtype='uint8')
+                acts = np.array(acts, dtype='uint8')
+                rewards = np.array(rewards, dtype='float32')
+                os.makedirs(db_path(num_episodes))
+                db = lmdb.open(db_path(num_episodes))
+                with db.begin(write=True) as txn:
+                    txn.put('frames', frames.tostring())
+                    txn.put('acts', acts)
+                    txn.put('rewards', rewards)
                 if num_episodes > 9999:
                     return
 
@@ -129,9 +134,7 @@ class Agent(object):
                 # [ADD] save observation & reward
                 num_episodes += 1
                 num_steps = 0
-                os.makedirs(episode_path(num_episodes))
-                cv2.imwrite(image_path(num_episodes, num_steps), observation.astype('uint8'))
-                acts, rewards = [], []
+                frames, acts, rewards= [observation], [], []
 
     def play(self, test_ep, n_step=10000, n_episode=100):
         tf.global_variables_initializer().run()
