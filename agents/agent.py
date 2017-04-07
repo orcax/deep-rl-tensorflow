@@ -63,7 +63,7 @@ class Agent(object):
             self.new_game = self.env.new_game
 
         # [ADD]
-        self.data_path = '/home/yx150/Documents/atari-data/' + conf.env_name
+        self.data_path = '/home/yikun/Workspaces/atari-data/' + conf.env_name
 
 
     def train(self, t_max):
@@ -120,10 +120,11 @@ class Agent(object):
                 frames = np.array(frames, dtype='uint8')
                 acts = np.array(acts, dtype='uint8')
                 rewards = np.array(rewards, dtype='float32')
+                map_size = (frames.nbytes + acts.nbytes + rewards.nbytes) * 2
                 os.makedirs(db_path(num_episodes))
-                db = lmdb.open(db_path(num_episodes))
+                db = lmdb.open(db_path(num_episodes), map_size=map_size)
                 with db.begin(write=True) as txn:
-                    txn.put('frames', frames.tostring())
+                    txn.put('frames', frames.tobytes())
                     txn.put('acts', acts)
                     txn.put('rewards', rewards)
                 if num_episodes > 9999:
