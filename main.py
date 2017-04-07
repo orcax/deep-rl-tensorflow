@@ -26,7 +26,7 @@ flags.DEFINE_integer('max_random_start', 30, 'The maximum number of NOOP actions
 flags.DEFINE_integer('history_length', 4, 'The length of history of observation to use as an input to DQN')
 flags.DEFINE_integer('max_r', +1, 'The maximum value of clipped reward')
 flags.DEFINE_integer('min_r', -1, 'The minimum value of clipped reward')
-flags.DEFINE_string('observation_dims', '[80, 80]', 'The dimension of gym observation')
+flags.DEFINE_string('observation_dims', '[84, 84]', 'The dimension of gym observation')
 flags.DEFINE_boolean('random_start', True, 'Whether to start with random state')
 flags.DEFINE_boolean('use_cumulated_reward', False, 'Whether to use cumulated reward or not')
 
