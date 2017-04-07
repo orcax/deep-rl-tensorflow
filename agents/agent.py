@@ -62,7 +62,7 @@ class Agent(object):
             self.new_game = self.env.new_game
 
         # [ADD]
-        self.data_path = '/home/yikun/Workspaces/atari-data/' + conf.env_name
+        self.data_path = '/home/yx150/Documents/atari-data/' + conf.env_name
 
 
     def train(self, t_max):
